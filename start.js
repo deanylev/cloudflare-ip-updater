@@ -36,27 +36,56 @@ async function doUpdate() {
 
   logger.info('updating...');
 
-  const zones = (await cloudflare.zones.browse()).result;
-  const zone = zones.find((zone) => zone.name === zoneName);
+  try {
+    const zones = (await cloudflare.zones.browse()).result;
+    const zone = zones.find((zone) => zone.name === zoneName);
 
-  if (!zone) {
-    logger.warn(`no matching zone found with name ${zoneName}, retrying in ${updateInterval}ms`);
+    if (!zone) {
+      logger.warn(`no matching zone found with name ${zoneName}, retrying in ${updateInterval}ms`);
+      return;
+    }
+
+    try {
+      const records = (await cloudflare.dnsRecords.browse(zone.id)).result;
+      const record = records.find((record) => record.name === fullRecordName && record.type === recordType);
+
+      if (!record) {
+        logger.warn(`no matching record with name ${fullRecordName} and type ${recordType}, retrying in ${updateInterval}ms`);
+        return;
+      }
+
+      try {
+        const ip = await publicIp.v4();
+
+        try {
+          await cloudflare.dnsRecords.edit(zone.id, record.id, {
+            content: ip,
+            ...pick(record, ['name', 'proxied', 'ttl', 'type'])
+          });
+        } catch (error) {
+          logger.error(`error while updating record, retrying in ${updateInterval}ms`, {
+            error
+          });
+          return;
+        }
+      } catch (error) {
+        logger.error(`error while retrieving public ip address, retrying in ${updateInterval}ms`, {
+          error
+        });
+        return;
+      }
+    } catch (error) {
+      logger.error(`error while fetching records, retrying in ${updateInterval}ms`, {
+        error
+      });
+      return;
+    }
+  } catch (error) {
+    logger.error(`error while fetching zones, retrying in ${updateInterval}ms`, {
+      error
+    });
     return;
   }
-
-  const records = (await cloudflare.dnsRecords.browse(zone.id)).result;
-  const record = records.find((record) => record.name === fullRecordName && record.type === recordType);
-
-  if (!record) {
-    logger.warn(`no matching record with name ${fullRecordName} and type ${recordType}, retrying in ${updateInterval}ms`);
-    return;
-  }
-
-  const ip = await publicIp.v4();
-  await cloudflare.dnsRecords.edit(zone.id, record.id, {
-    content: ip,
-    ...pick(record, ['name', 'proxied', 'ttl', 'type'])
-  });
 
   logger.info(`updated successfully, updating again in ${updateInterval}ms`);
 }
