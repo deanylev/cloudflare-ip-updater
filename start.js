@@ -27,6 +27,8 @@ async function doUpdate() {
   const recordName = process.env.CF_RECORD_NAME;
   const recordType = (process.env.CF_RECORD_TYPE || 'A').toUpperCase();
   const fullRecordName = recordName && recordName !== '@' ? `${recordName}.${zoneName}` : zoneName;
+  const nextUpdateAt = Date.now() + updateInterval;
+  const getTimeTillNextUpdate = () => nextUpdateAt - Date.now();
 
   if (!RECORD_TYPES.includes(recordType)) {
     logger.error(`error: record type must be one of: ${RECORD_TYPES.join(', ')}`);
@@ -41,7 +43,7 @@ async function doUpdate() {
     const zone = zones.find((zone) => zone.name === zoneName);
 
     if (!zone) {
-      logger.warn(`no matching zone found with name ${zoneName}, retrying in ${updateInterval}ms`);
+      logger.warn(`no matching zone found with name ${zoneName}, retrying in ${getTimeTillNextUpdate()} ms`);
       return;
     }
 
@@ -50,7 +52,7 @@ async function doUpdate() {
       const record = records.find((record) => record.name === fullRecordName && record.type === recordType);
 
       if (!record) {
-        logger.warn(`no matching record with name ${fullRecordName} and type ${recordType}, retrying in ${updateInterval}ms`);
+        logger.warn(`no matching record with name ${fullRecordName} and type ${recordType}, retrying in ${getTimeTillNextUpdate()} ms`);
         return;
       }
 
@@ -63,31 +65,31 @@ async function doUpdate() {
             ...pick(record, ['name', 'proxied', 'ttl', 'type'])
           });
         } catch (error) {
-          logger.error(`error while updating record, retrying in ${updateInterval}ms`, {
+          logger.error(`error while updating record, retrying in ${getTimeTillNextUpdate()} ms`, {
             error
           });
           return;
         }
       } catch (error) {
-        logger.error(`error while retrieving public ip address, retrying in ${updateInterval}ms`, {
+        logger.error(`error while retrieving public ip address, retrying in ${getTimeTillNextUpdate()} ms`, {
           error
         });
         return;
       }
     } catch (error) {
-      logger.error(`error while fetching records, retrying in ${updateInterval}ms`, {
+      logger.error(`error while fetching records, retrying in ${getTimeTillNextUpdate()} ms`, {
         error
       });
       return;
     }
   } catch (error) {
-    logger.error(`error while fetching zones, retrying in ${updateInterval}ms`, {
+    logger.error(`error while fetching zones, retrying in ${getTimeTillNextUpdate()} ms`, {
       error
     });
     return;
   }
 
-  logger.info(`updated successfully, updating again in ${updateInterval}ms`);
+  logger.info(`updated successfully, updating again in ${getTimeTillNextUpdate()} ms`);
 }
 
 doUpdate();
